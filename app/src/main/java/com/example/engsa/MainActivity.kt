@@ -1,9 +1,11 @@
 package com.example.engsa
 
 import android.app.SearchManager
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,31 +16,44 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Text
-import androidx.compose.material.TextField
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+
 import com.example.engsa.ui.theme.EngSATheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
+
+import androidx.compose.ui.text.AnnotatedString
+
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+
+
+import androidx.navigation.compose.rememberNavController
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.IOException
 import java.io.InputStream
 import java.nio.channels.AsynchronousFileChannel.open
 
+lateinit var engData : Array<String>
+lateinit var searchWord : String
+lateinit var randomWord : String
+
 class MainActivity : ComponentActivity() {
-    lateinit var engData : Array<String>
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,13 +68,17 @@ class MainActivity : ComponentActivity() {
                     engData = getJsonDataFromAsset(applicationContext,"EWords446k.json")
 
 //                    val myWebView = WebView(activityContext)
-                    mainView(engData)
+                    appNav()
+//                    mainView(engData)
 //                    Greeting("Android")
                 }
             }
         }
     }
 }
+
+
+
 @Composable
 fun webView(webLink : String){
 
@@ -80,6 +99,90 @@ fun webView(webLink : String){
         it.loadUrl(webLink)
     })
 }
+
+@Composable
+fun openSearchWord(){
+    var state1 by remember { mutableStateOf(0) }
+    val titles = listOf("Oxford", "Cambrigde", "GG")
+
+    Column() {
+        TabRow(selectedTabIndex = state1) {
+            titles.forEachIndexed { index, title ->
+                Tab(
+                    selected = state1 == index,
+                    onClick = { state1 = index },
+                    text = { Text(text = title, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                )
+            }
+        }
+        if(state1 == 0){
+            webView(webLink = "https://www.oxfordlearnersdictionaries.com/definition/american_english/${searchWord}?q=${searchWord}")
+        }
+        if(state1 == 1){
+            webView(webLink = "https://dictionary.cambridge.org/dictionary/english-vietnamese/${searchWord}")
+        }
+        if(state1 == 2){
+            webView(webLink = "https://translate.google.com/?hl=vi&sl=en&tl=vi&text=${searchWord}&op=translate")
+        }
+    }
+    
+}
+
+@Composable
+fun appNav(modifier: Modifier = Modifier, navController: NavHostController = rememberNavController()) {
+// Get current back stack entry
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    // Get the name of the current screen
+    val currentScreen = backStackEntry?.destination?.route
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    if (currentScreen != null) {
+                        Text(currentScreen)
+                    } else {
+                        Text("NULL")
+                    }
+                },
+                modifier = modifier,
+                navigationIcon = {
+
+                    if (navController.previousBackStackEntry != null) {
+//                        Log.e(TAG, "THISS ISISS " + navController.previousBackStackEntry.toString())
+                        IconButton(onClick = { navController.navigateUp()
+                            searchWord = ""
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) {
+
+
+        NavHost(
+            navController = navController,
+            startDestination = "mainView",
+
+            ) {
+            composable(route = "mainView") {
+                mainView(navController = navController)
+            }
+            composable(route = "webView") {
+                openSearchWord()
+            }
+            composable(route = "appNav") {
+                appNav()
+            }
+        }
+
+
+    }
+}
 fun getJsonDataFromAsset(context: Context, fileName: String): Array<String> {
     val jsonString: String
     try {
@@ -96,24 +199,28 @@ fun getJsonDataFromAsset(context: Context, fileName: String): Array<String> {
     return engData
 }
 @Composable
-fun mainView(engData : Array<String>)
-{
+fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
     var state by remember { mutableStateOf(0) }
+
     var searchText by rememberSaveable { mutableStateOf("") }
-    var sampleString = arrayOf("a", "ab", "b", "ba", "bb")
     val titles = listOf("Search", "Flash Card", "History")
 
+
     Column {
+
         TabRow(selectedTabIndex = state) {
             titles.forEachIndexed { index, title ->
                 Tab(
                     selected = state == index,
-                    onClick = { state = index },
+                    onClick = { state = index
+                              if (state == 1) {
+                                  randomWord = engData.random()
+                              }},
                     text = { Text(text = title, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                 )
             }
         }
-        if(state == 0) {
+        if (state == 0) {
             Column() {
                 TextField(
                     value = searchText,
@@ -122,31 +229,41 @@ fun mainView(engData : Array<String>)
                 )
                 if (searchText != "") {
                     LazyColumn() {
-                        items(engData.filter { searchText in it }) { textFilter ->
-                            Text(
-                                modifier = Modifier.align(Alignment.CenterHorizontally),
-                                text = textFilter,
-                                style = MaterialTheme.typography.h5
-                            )
+                        items(engData.filter { it.startsWith(searchText) }) { textFilter ->
+
+                            ClickableText(text = AnnotatedString(textFilter), onClick = {
+                                searchWord = textFilter
+                                navController.navigate("webView")
+
+                            }, modifier = Modifier.padding(10.dp))
+
                         }
                     }
+
+
+                    Text(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        text = searchText,
+                        style = MaterialTheme.typography.h3
+                    )
                 }
 
+            }
+        }
+        if (state == 1) {
+            Column () {
 
-                Text(
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    text = searchText,
-                    style = MaterialTheme.typography.h3
-                )
+                ClickableText(text = AnnotatedString(randomWord), onClick = {
+                    searchWord = randomWord
+                    navController.navigate("webView")
+
+                })
             }
 
         }
-        if(state == 1) {
-            webView("https://www.apple.com/")
-        }
-        if(state == 2) {
+        if (state == 2) {
             Text(
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+
                 text = "Text tab 3 selected",
                 style = MaterialTheme.typography.h3
             )
@@ -156,10 +273,10 @@ fun mainView(engData : Array<String>)
 }
 
 
-@Composable
-fun Greeting(name: String) {
-    Text(text = "Hello $name!", modifier = Modifier.padding(24.dp))
-}
+
+
+
+
 
 //@Preview(showBackground = true)
 //@Composable
