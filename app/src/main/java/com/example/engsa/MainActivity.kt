@@ -44,13 +44,20 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+
+import java.io.BufferedReader
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.nio.channels.AsynchronousFileChannel.open
 
+
 lateinit var engData : Array<String>
+lateinit var engData3k : Array<String>
 lateinit var searchWord : String
 lateinit var randomWord : String
+lateinit var userHistory : List<String>
+lateinit var contextDir : File
 
 class MainActivity : ComponentActivity() {
 
@@ -64,9 +71,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colors.background
                 ) {
-
+                    contextDir = applicationContext.filesDir
                     engData = getJsonDataFromAsset(applicationContext,"EWords446k.json")
-
+                    engData3k = getJsonDataFromAsset(applicationContext,"EWords2.json")
+                    userHistory = readJSON( applicationContext, "userHistory.json")
 //                    val myWebView = WebView(activityContext)
                     appNav()
 //                    mainView(engData)
@@ -189,7 +197,7 @@ fun getJsonDataFromAsset(context: Context, fileName: String): Array<String> {
         jsonString = context.assets.open(fileName).bufferedReader().use { it.readText() }
     } catch (ioException: IOException) {
         ioException.printStackTrace()
-        return arrayOf("")
+        return arrayOf()
     }
     val gson = Gson()
     val engDataType = object : TypeToken<Array<String>>() {}.type
@@ -197,6 +205,33 @@ fun getJsonDataFromAsset(context: Context, fileName: String): Array<String> {
     var engData: Array<String> = gson.fromJson(jsonString, engDataType)
 
     return engData
+}
+
+fun readJSON(context: Context, fileName:String): List<String> {
+    val jsonString: String
+    try {
+        val bufferedReader: BufferedReader = File(context.filesDir, fileName).bufferedReader()
+        jsonString = bufferedReader.use { it.readText() }
+    } catch (ioException: IOException) {
+        ioException.printStackTrace()
+        return emptyList()
+    }
+    val gson = Gson()
+    val engDataType = object : TypeToken<List<String>>() {}.type
+
+    var engData: List<String> = gson.fromJson(jsonString, engDataType)
+
+    return engData
+}
+fun writeJSONtoFile( fileName:String, saveData: List<String>) {
+
+    //Create a Object of Gson
+    var gson = Gson()
+    //Convert the Json object to JsonString
+    var jsonString:String = gson.toJson(saveData)
+    //Initialize the File Writer and write into file
+    val file= File(contextDir, fileName)
+    file.writeText(jsonString)
 }
 @Composable
 fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
@@ -214,7 +249,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                     selected = state == index,
                     onClick = { state = index
                               if (state == 1) {
-                                  randomWord = engData.random()
+                                  randomWord = engData3k.random()
                               }},
                     text = { Text(text = title, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                 )
@@ -233,6 +268,8 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
 
                             ClickableText(text = AnnotatedString(textFilter), onClick = {
                                 searchWord = textFilter
+                                userHistory += searchWord
+                                writeJSONtoFile("userHistory.json", userHistory)
                                 navController.navigate("webView")
 
                             }, modifier = Modifier.padding(10.dp))
@@ -241,12 +278,18 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                     }
 
 
-                    Text(
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                        text = searchText,
-                        style = MaterialTheme.typography.h3
-                    )
+
                 }
+                Text(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    text = searchText,
+                    style = MaterialTheme.typography.h3
+                )
+                Text(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    text = userHistory.count().toString(),
+                    style = MaterialTheme.typography.h3
+                )
 
             }
         }
@@ -255,6 +298,8 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
 
                 ClickableText(text = AnnotatedString(randomWord), onClick = {
                     searchWord = randomWord
+                    userHistory += searchWord
+                    writeJSONtoFile("userHistory.json", userHistory)
                     navController.navigate("webView")
 
                 })
@@ -262,11 +307,17 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
 
         }
         if (state == 2) {
-            Text(
+            LazyColumn() {
+                items(userHistory) { textFilter ->
 
-                text = "Text tab 3 selected",
-                style = MaterialTheme.typography.h3
-            )
+                    ClickableText(text = AnnotatedString(textFilter), onClick = {
+                        searchWord = textFilter
+                        navController.navigate("webView")
+
+                    }, modifier = Modifier.padding(10.dp))
+
+                }
+            }
         }
 
     }
