@@ -1,9 +1,11 @@
 package com.example.engsa
 
+import android.annotation.SuppressLint
 import android.app.SearchManager
 import android.content.ContentValues.TAG
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
@@ -44,21 +46,34 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import io.realm.kotlin.Realm
+import io.realm.kotlin.ext.query
+import io.realm.kotlin.ext.realmListOf
+import io.realm.kotlin.mongodb.App
+import io.realm.kotlin.mongodb.Credentials
+import io.realm.kotlin.mongodb.User
+import io.realm.kotlin.mongodb.sync.SyncConfiguration
+import io.realm.kotlin.types.RealmList
 
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.nio.channels.AsynchronousFileChannel.open
-
+import kotlinx.coroutines.*
 
 lateinit var engData : Array<String>
 lateinit var engData3k : Array<String>
 lateinit var searchWord : String
 lateinit var randomWord : String
-lateinit var userHistory : List<String>
+ var userHistory : List<String> = arrayListOf<String>()
 lateinit var contextDir : File
-
+lateinit var realm: Realm
+lateinit var userDataRealm: UserDataClassRealm
+var logingStatus = false
+val app = App.create("engs-wnbiw")
+lateinit var user : User
+val credentials = Credentials.anonymous()
 class MainActivity : ComponentActivity() {
 
 
@@ -75,8 +90,13 @@ class MainActivity : ComponentActivity() {
                     engData = getJsonDataFromAsset(applicationContext,"EWords446k.json")
                     engData3k = getJsonDataFromAsset(applicationContext,"EWords2.json")
                     userHistory = readJSON( applicationContext, "userHistory.json")
+
+
+
+
 //                    val myWebView = WebView(activityContext)
-                    appNav()
+                    logInApp()
+
 //                    mainView(engData)
 //                    Greeting("Android")
                 }
@@ -136,12 +156,133 @@ fun openSearchWord(){
     
 }
 
+suspend fun logIn() {
+
+}
+@SuppressLint("CoroutineCreationDuringComposition")
+@Composable
+fun logInApp() {
+
+    var clickedButton by remember {
+        mutableStateOf(false)
+    }
+    runBlocking {
+        user = app.login(credentials)
+        val config = SyncConfiguration.Builder(
+            user,
+            setOf(UserDataClassRealm::class)
+        ) // the SyncConfiguration defaults to Flexible Sync, if a Partition is not specified
+            .initialSubscriptions { realm ->
+                add(
+                    realm.query<UserDataClassRealm>(
+                        "ownerId == $0", // owner_id == the logged in user
+                        user.id
+                    ),
+                    "user"
+                )
+
+            }
+            .build()
+        realm = Realm.open(config)
+        var countTemp = realm.query<UserDataClassRealm>().find().count()
+        if( countTemp == 0) {
+//        var temp = app.currentUser?.let { UserDataClassRealm(ownerIdInput = it.id) }
+            realm.writeBlocking {
+                this.copyToRealm(UserDataClassRealm().apply {
+                    ownerId = user.id
+                    deviceName = Build.DEVICE.toString()
+                    userSearchedWord.addAll(userHistory)
+
+                })
+            }
+        }
+
+//        if (userDataRealm.userSearchedWord == null) {
+//            userDataRealm.userSearchedWord
+//        }
+//        userDataRealm.userSearchedWord = arrayListOf<String>()
+//        userHistory += "tempt"
+
+
+
+        userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
+        if (userDataRealm != null)
+        {
+            logingStatus = true
+        }
+
+    }
+    appNav()
+    // create a SyncConfiguration
+//    if (logingStatus) {
+//        appNav()
+//    } else {
+//        Column() {
+//            if(!clickedButton) {
+//                Button(onClick = {
+//                    clickedButton
+////                    logInRealm()
+//
+//                }, enabled = !clickedButton) {
+//                    Text(text = "Click to Log In")
+//                }
+//            }
+//            if(clickedButton) {
+//                CircularProgressIndicator()
+//            }
+//
+//        }
+//    }
+}
+
+fun logInRealm () = io.realm.kotlin.internal.platform.runBlocking {
+    var user = app.login(credentials)
+    val config = SyncConfiguration.Builder(
+        user,
+        setOf(UserDataClassRealm::class)
+    ) // the SyncConfiguration defaults to Flexible Sync, if a Partition is not specified
+        .initialSubscriptions { realm ->
+            add(
+                realm.query<UserDataClassRealm>(
+                    "ownerId == $0", // owner_id == the logged in user
+                    user.id
+                ),
+                "user"
+            )
+
+        }
+        .build()
+    realm = Realm.open(config)
+    var userID = user.id.toString()
+    var countTemp = realm.query<UserDataClassRealm>().find().count()
+    if( countTemp == 0) {
+//        var temp = app.currentUser?.let { UserDataClassRealm(ownerIdInput = it.id) }
+        realm.writeBlocking {
+            this.copyToRealm(UserDataClassRealm().apply {
+                ownerId = user.id
+                deviceName = Build.DEVICE.toString()
+//                userSearchedWord = ArrayList<String>()
+            })
+        }
+    }
+    userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
+
+    if (userDataRealm != null)
+    {
+        logingStatus = true
+    }
+
+}
+
+
+
 @Composable
 fun appNav(modifier: Modifier = Modifier, navController: NavHostController = rememberNavController()) {
 // Get current back stack entry
     val backStackEntry by navController.currentBackStackEntryAsState()
     // Get the name of the current screen
     val currentScreen = backStackEntry?.destination?.route
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -269,6 +410,20 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                             ClickableText(text = AnnotatedString(textFilter), onClick = {
                                 searchWord = textFilter
                                 userHistory += searchWord
+                                runBlocking {
+                                    realm.writeBlocking {
+                                        userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
+                                        userDataRealm = findLatest(userDataRealm)!!
+                                        delete(userDataRealm)
+                                        this.copyToRealm(UserDataClassRealm().apply {
+                                            ownerId =  user.id
+                                            deviceName = Build.DEVICE.toString()
+                                            userSearchedWord.addAll(userHistory)
+
+                                        })
+
+                                    }
+                                }
                                 writeJSONtoFile("userHistory.json", userHistory)
                                 navController.navigate("webView")
 
@@ -290,6 +445,11 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                     text = userHistory.count().toString(),
                     style = MaterialTheme.typography.h3
                 )
+                Text(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    text = userDataRealm.userSearchedWord.count().toString(),
+                    style = MaterialTheme.typography.h3
+                )
 
             }
         }
@@ -299,6 +459,25 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                 ClickableText(text = AnnotatedString(randomWord), onClick = {
                     searchWord = randomWord
                     userHistory += searchWord
+                    runBlocking {
+                        runBlocking {
+                            realm.writeBlocking {
+                                userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
+                                userDataRealm = findLatest(userDataRealm)!!
+                                delete(userDataRealm)
+                                this.copyToRealm(UserDataClassRealm().apply {
+                                    ownerId =  user.id
+                                    deviceName = Build.DEVICE.toString()
+                                    userSearchedWord.addAll(userHistory)
+
+                                })
+
+                            }
+                        }
+                    }
+
+
+
                     writeJSONtoFile("userHistory.json", userHistory)
                     navController.navigate("webView")
 
@@ -308,7 +487,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
         }
         if (state == 2) {
             LazyColumn() {
-                items(userHistory) { textFilter ->
+                items(userDataRealm.userSearchedWord) { textFilter ->
 
                     ClickableText(text = AnnotatedString(textFilter), onClick = {
                         searchWord = textFilter
