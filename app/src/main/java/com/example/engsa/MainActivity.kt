@@ -54,6 +54,7 @@ import io.realm.kotlin.mongodb.Credentials
 import io.realm.kotlin.mongodb.User
 import io.realm.kotlin.mongodb.sync.SyncConfiguration
 import io.realm.kotlin.types.RealmList
+import io.realm.kotlin.types.RealmUUID
 
 import java.io.BufferedReader
 import java.io.File
@@ -73,6 +74,7 @@ lateinit var userDataRealm: UserDataClassRealm
 var logingStatus = false
 val app = App.create("engs-wnbiw")
 lateinit var user : User
+lateinit var PRIMARY_KEY_VALUE : RealmUUID
 val credentials = Credentials.anonymous()
 class MainActivity : ComponentActivity() {
 
@@ -206,6 +208,8 @@ fun logInApp() {
 
 
         userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
+        PRIMARY_KEY_VALUE = userDataRealm._id
+
         if (userDataRealm != null)
         {
             logingStatus = true
@@ -389,6 +393,8 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                 Tab(
                     selected = state == index,
                     onClick = { state = index
+//                        userDataRealm =
+//                            realm.query<UserDataClassRealm>("_id == $0", PRIMARY_KEY_VALUE).first().find()!!
                               if (state == 1) {
                                   randomWord = engData3k.random()
                               }},
@@ -412,15 +418,11 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                                 userHistory += searchWord
                                 runBlocking {
                                     realm.writeBlocking {
-                                        userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
-                                        userDataRealm = findLatest(userDataRealm)!!
-                                        delete(userDataRealm)
-                                        this.copyToRealm(UserDataClassRealm().apply {
-                                            ownerId =  user.id
-                                            deviceName = Build.DEVICE.toString()
-                                            userSearchedWord.addAll(userHistory)
 
-                                        })
+                                        findLatest(userDataRealm)?.userSearchedWord?.add(searchWord)
+
+//
+//                                        })
 
                                     }
                                 }
@@ -447,7 +449,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                 )
                 Text(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                    text = userDataRealm.userSearchedWord.count().toString(),
+                    text =  realm.query<UserDataClassRealm>("_id == $0", PRIMARY_KEY_VALUE).first().find()!!.userSearchedWord.count().toString(),
                     style = MaterialTheme.typography.h3
                 )
 
@@ -459,22 +461,16 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                 ClickableText(text = AnnotatedString(randomWord), onClick = {
                     searchWord = randomWord
                     userHistory += searchWord
+
                     runBlocking {
-                        runBlocking {
-                            realm.writeBlocking {
-                                userDataRealm = realm.query<UserDataClassRealm>().first().find()!!
-                                userDataRealm = findLatest(userDataRealm)!!
-                                delete(userDataRealm)
-                                this.copyToRealm(UserDataClassRealm().apply {
-                                    ownerId =  user.id
-                                    deviceName = Build.DEVICE.toString()
-                                    userSearchedWord.addAll(userHistory)
+                        realm.writeBlocking {
 
-                                })
+                            findLatest(userDataRealm)?.userSearchedWord?.add(searchWord)
 
-                            }
+
                         }
                     }
+
 
 
 
@@ -487,7 +483,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
         }
         if (state == 2) {
             LazyColumn() {
-                items(userDataRealm.userSearchedWord) { textFilter ->
+                items(realm.query<UserDataClassRealm>("_id == $0", PRIMARY_KEY_VALUE).first().find()!!.userSearchedWord) { textFilter ->
 
                     ClickableText(text = AnnotatedString(textFilter), onClick = {
                         searchWord = textFilter
