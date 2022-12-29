@@ -383,6 +383,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
     var state by remember { mutableStateOf(0) }
 
     var searchText by rememberSaveable { mutableStateOf("") }
+//    var searchText = ""
     val titles = listOf("Search", "Flash Card", "History")
 
 
@@ -417,7 +418,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                                 searchWord = textFilter
                                 userHistory += searchWord
                                 runBlocking {
-                                    realm.writeBlocking {
+                                    realm.write {
 
                                         findLatest(userDataRealm)?.userSearchedWord?.add(searchWord)
 
@@ -463,7 +464,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
                     userHistory += searchWord
 
                     runBlocking {
-                        realm.writeBlocking {
+                        realm.write {
 
                             findLatest(userDataRealm)?.userSearchedWord?.add(searchWord)
 
@@ -483,7 +484,7 @@ fun mainView(navController: NavHostController, modifier: Modifier = Modifier) {
         }
         if (state == 2) {
             LazyColumn() {
-                items(realm.query<UserDataClassRealm>("_id == $0", PRIMARY_KEY_VALUE).first().find()!!.userSearchedWord) { textFilter ->
+                items(realm.query<UserDataClassRealm>("_id == $0", PRIMARY_KEY_VALUE).first().find()!!.userSearchedWord.reversed()) { textFilter ->
 
                     ClickableText(text = AnnotatedString(textFilter), onClick = {
                         searchWord = textFilter
